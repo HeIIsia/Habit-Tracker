@@ -9,11 +9,6 @@ MAX_DAYS_BAR = 30
 # Theme
 BACKGROUND = "#000000"
 FONT_COLOR = "#E3A6FF"
-#bg="#1f1f1f"
-
-
-#base_color = "#2ecc71" \
-#             "#2b2b2b"
 
 
 # ---------- popup centering ----------
