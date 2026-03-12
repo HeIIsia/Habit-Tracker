@@ -2,13 +2,34 @@ import tkinter as tk
 from tkinter import ttk
 import os, json
 from datetime import datetime, timedelta
+import habit_timer
 
 HABITS_FILE = "habits.jsonl"
 MAX_DAYS_BAR = 30
 
-# Theme
-BACKGROUND = "#000000"
-FONT_COLOR = "#E3A6FF"
+# =========================
+# COLOR PALETTE (EDIT HERE)
+# =========================
+BACKGROUND = "#E3A6FF"
+PANEL_BG   = "#E9DDFF"
+TEXT       = "#702C8C"
+MUTED_TEXT = "#5B5077"
+ACCENT     = "#BFA2FF"
+BUTTON_BG  = "#E3A6FF"
+
+# Additional UI colors used in this file
+TEXT_SOFT     = MUTED_TEXT         # was "#cccccc"
+TEXT_BRIGHT   = TEXT               # was "#e6e6e6"
+
+SUCCESS_GREEN = "#2ecc71"          # checkmark + filled bars
+DANGER_RED    = "#ff4d4d"          # X button
+
+BAR_BG        = "#1f1f1f"          # bar background canvas
+BAR_EMPTY     = "#2b2b2b"          # empty segments
+BAR_FILLED    = SUCCESS_GREEN      # filled segments
+BAR_HIGHLIGHT = "#36f18a"          # small top highlight for today
+
+BTN_ACTIVE_BG = ACCENT             # button active background
 
 
 # ---------- popup centering ----------
@@ -20,6 +41,7 @@ def center_on_parent(win: tk.Toplevel, parent: tk.Tk):
     x = px + (pw - ww) // 2
     y = py + (ph - wh) // 2
     win.geometry(f"+{x}+{y}")
+
 
 # ---------- date helpers ----------
 def today_str():
@@ -34,6 +56,7 @@ def time_remaining_to_end_of_day():
     delta = end - now
     secs = max(0, int(delta.total_seconds()))
     return secs // 3600, (secs % 3600) // 60
+
 
 # ---------- strike computed from dates ----------
 def strike_from_dates(dates_list, today=None) -> int:
@@ -61,6 +84,7 @@ def strike_from_dates(dates_list, today=None) -> int:
         cursor -= timedelta(days=1)
     return streak
 
+
 # ---------- JSONL helpers (one line per habit; no 'strike' stored) ----------
 def _sanitize_record(rec: dict) -> dict:
     name = rec.get("habit_name")
@@ -75,7 +99,7 @@ def _sanitize_record(rec: dict) -> dict:
     for s in dates:
         if isinstance(s, str):
             try:
-                parse_ymd(s)          # validate format
+                parse_ymd(s)  # validate format
                 clean.add(s)
             except Exception:
                 pass
@@ -101,7 +125,6 @@ def load_habits_jsonl(filename=HABITS_FILE):
             if not isinstance(name, str) or not name.strip():
                 continue
 
-            # support any old tombstones; removes habit if present
             if rec.get("deleted") is True:
                 habits.pop(name.strip(), None)
                 continue
@@ -136,28 +159,30 @@ def compact_habits_file(filename=HABITS_FILE):
     habits = load_habits_jsonl(filename)
     save_habits_jsonl(habits, filename)
 
+
 # ---------- progress bar ----------
 def make_progress_bar(parent, filled_days: int, highlight_today: bool):
     width, height = 540, 22
-    bar = tk.Canvas(parent, width=width, height=height, bg="#1f1f1f", highlightthickness=0)
+    bar = tk.Canvas(parent, width=width, height=height, bg=BAR_BG, highlightthickness=0)
 
     filled = max(0, min(MAX_DAYS_BAR, filled_days))
     pad = 2
-    seg_w = (width - pad*(MAX_DAYS_BAR+1)) / MAX_DAYS_BAR
+    seg_w = (width - pad * (MAX_DAYS_BAR + 1)) / MAX_DAYS_BAR
 
     for i in range(MAX_DAYS_BAR):
-        x0 = pad + i*(seg_w+pad)
+        x0 = pad + i * (seg_w + pad)
         x1 = x0 + seg_w
-        base_color = "#2ecc71" if i < filled else "#2b2b2b"
+        base_color = BAR_FILLED if i < filled else BAR_EMPTY
         bar.create_rectangle(x0, 4, x1, 18, fill=base_color, outline="")
 
     if highlight_today and filled > 0:
         i = filled - 1
-        x0 = pad + i*(seg_w+pad)
+        x0 = pad + i * (seg_w + pad)
         x1 = x0 + seg_w
-        bar.create_rectangle(x0, 1, x1, 4, fill="#36f18a", outline="")
+        bar.create_rectangle(x0, 1, x1, 4, fill=BAR_HIGHLIGHT, outline="")
 
     return bar
+
 
 # ---------- GUI ----------
 class HabitApp(tk.Tk):
@@ -167,7 +192,6 @@ class HabitApp(tk.Tk):
         self.geometry("780x520")
         self.configure(bg=BACKGROUND)
 
-        # Cleanup once: removes duplicates + strips old stored 'strike'
         compact_habits_file(HABITS_FILE)
 
         top = tk.Frame(self, bg=BACKGROUND)
@@ -191,15 +215,20 @@ class HabitApp(tk.Tk):
             w.destroy()
 
         if not self.habits:
-            tk.Label(self.list_frame, text="No habits yet. Click Create.",
-                     fg="#cccccc", bg=BACKGROUND, font=("Segoe UI", 12)).pack(anchor="w", pady=10)
+            tk.Label(
+                self.list_frame,
+                text="No habits yet. Click Create.",
+                fg=TEXT_SOFT,
+                bg=BACKGROUND,
+                font=("Segoe UI", 12),
+            ).pack(anchor="w", pady=10)
             return
 
         for habit_name in sorted(self.habits.keys(), key=str.lower):
             rec = self.habits[habit_name]
             dates = sorted(set(rec.get("dates", [])))
 
-            strike = strike_from_dates(dates)  # computed live
+            strike = strike_from_dates(dates)
 
             row = tk.Frame(self.list_frame, bg=BACKGROUND)
             row.pack(fill="x", anchor="n", pady=10)
@@ -210,16 +239,13 @@ class HabitApp(tk.Tk):
             tk.Label(
                 mid,
                 text=f"{habit_name}   (strike: {strike}, days: {len(dates)})",
-                fg="#e6e6e6", bg=BACKGROUND,
-                font=("Segoe UI", 11, "bold")
+                fg=TEXT_BRIGHT,
+                bg=BACKGROUND,
+                font=("Segoe UI", 11, "bold"),
             ).pack(anchor="w")
 
             line = tk.Frame(mid, bg=BACKGROUND)
             line.pack(fill="x", anchor="w", pady=(6, 0))
-
-            #highlight = (today_str() in set(dates))
-            #bar = make_progress_bar(line, filled_days=len(dates), highlight_today=highlight)
-            strike = strike_from_dates(dates)  # already computed above
 
             filled_days = strike if strike > 0 else 0
             highlight = (today_str() in set(dates)) and (strike > 0)
@@ -230,17 +256,49 @@ class HabitApp(tk.Tk):
             btns = tk.Frame(line, bg=BACKGROUND)
             btns.pack(side="left", padx=(12, 0), anchor="center")
 
-            tk.Button(btns, text="✓", font=("Segoe UI", 12, "bold"),
-                      fg="#2ecc71", bg=BACKGROUND, activebackground="#111111",
-                      bd=0, command=lambda h=habit_name: self.on_check(h)).pack(side="left", padx=6)
+            tk.Button(
+                btns,
+                text="✓",
+                font=("Segoe UI", 12, "bold"),
+                fg=SUCCESS_GREEN,
+                bg=BACKGROUND,
+                activebackground=BTN_ACTIVE_BG,
+                bd=0,
+                command=lambda h=habit_name: self.on_check(h),
+            ).pack(side="left", padx=6)
 
-            tk.Button(btns, text="🕒", font=("Segoe UI", 12),
-                      fg="#e6e6e6", bg=BACKGROUND, activebackground="#111111",
-                      bd=0, command=lambda h=habit_name: self.on_clock(h)).pack(side="left", padx=6)
+            tk.Button(
+                btns,
+                text="🕒",
+                font=("Segoe UI", 12),
+                fg=TEXT_BRIGHT,
+                bg=BACKGROUND,
+                activebackground=BTN_ACTIVE_BG,
+                bd=0,
+                command=lambda h=habit_name: self.on_clock(h),
+            ).pack(side="left", padx=6)
 
-            tk.Button(btns, text="✗", font=("Segoe UI", 12, "bold"),
-                      fg="#ff4d4d", bg=BACKGROUND, activebackground="#111111",
-                      bd=0, command=lambda h=habit_name: self.on_reset_prompt(h)).pack(side="left", padx=6)
+            tk.Button(
+                btns,
+                text="✗",
+                font=("Segoe UI", 12, "bold"),
+                fg=DANGER_RED,
+                bg=BACKGROUND,
+                activebackground=BTN_ACTIVE_BG,
+                bd=0,
+                command=lambda h=habit_name: self.on_reset_prompt(h),
+            ).pack(side="left", padx=6)
+
+            tk.Button(
+                btns,
+                text="Timer",
+                font=("Segoe UI", 12),
+                fg=TEXT_BRIGHT,
+                bg=BACKGROUND,
+                activebackground=BTN_ACTIVE_BG,
+                bd=0,
+                command=lambda h=habit_name: habit_timer.open_habit_timer(self, h),
+            ).pack(side="left", padx=6)
 
     # ---------- Remove dropdown + confirm ----------
     def open_remove_dropdown(self):
@@ -264,10 +322,14 @@ class HabitApp(tk.Tk):
         dialog.resizable(False, False)
         dialog.grab_set()
 
-        tk.Label(dialog,
-                 text=f"Are you sure you want to remove {habit_name}?",
-                 fg="#e6e6e6", bg=BACKGROUND,
-                 font=("Segoe UI", 11), wraplength=420, justify="left"
+        tk.Label(
+            dialog,
+            text=f"Are you sure you want to remove {habit_name}?",
+            fg=TEXT_BRIGHT,
+            bg=BACKGROUND,
+            font=("Segoe UI", 11),
+            wraplength=420,
+            justify="left",
         ).pack(padx=12, pady=(12, 10))
 
         btns = tk.Frame(dialog, bg=BACKGROUND)
@@ -279,8 +341,6 @@ class HabitApp(tk.Tk):
             self.refresh_view()
 
         ttk.Button(btns, text="OK", command=ok).pack(side="bottom")
-        #ttk.Button(btns, text="Cancel", command=dialog.destroy).pack(side="left", padx=(8, 0))
-
         center_on_parent(dialog, self)
 
     # ---------- buttons ----------
@@ -295,22 +355,29 @@ class HabitApp(tk.Tk):
             pop.configure(bg=BACKGROUND)
             pop.resizable(False, False)
             pop.grab_set()
-            tk.Label(pop, text=f"'{habit_name}' is already recorded for today.",
-                     fg="#e6e6e6", bg=BACKGROUND, font=("Segoe UI", 11)
+            tk.Label(
+                pop,
+                text=f"'{habit_name}' is already recorded for today.",
+                fg=TEXT_BRIGHT,
+                bg=BACKGROUND,
+                font=("Segoe UI", 11),
             ).pack(padx=12, pady=(12, 10))
             ttk.Button(pop, text="OK", command=pop.destroy).pack(padx=12, pady=(0, 12))
             center_on_parent(pop, self)
             return
 
-        # Confirm: today counts only after OK
         dialog = tk.Toplevel(self)
         dialog.title("Confirm")
         dialog.configure(bg=BACKGROUND)
         dialog.resizable(False, False)
         dialog.grab_set()
 
-        tk.Label(dialog, text=f"Mark '{habit_name}' as done today?",
-                 fg="#e6e6e6", bg=BACKGROUND, font=("Segoe UI", 11)
+        tk.Label(
+            dialog,
+            text=f"Mark '{habit_name}' as done today?",
+            fg=TEXT_BRIGHT,
+            bg=BACKGROUND,
+            font=("Segoe UI", 11),
         ).pack(padx=12, pady=(12, 10))
 
         btns = tk.Frame(dialog, bg=BACKGROUND)
@@ -323,8 +390,6 @@ class HabitApp(tk.Tk):
             self.refresh_view()
 
         ttk.Button(btns, text="OK", command=ok).pack(side="bottom")
-        #ttk.Button(btns, text="Cancel", command=dialog.destroy).pack(side="left", padx=(8, 0))
-
         center_on_parent(dialog, self)
 
     def on_clock(self, habit_name: str):
@@ -334,9 +399,11 @@ class HabitApp(tk.Tk):
         strike = strike_from_dates(dates)
         h, m = time_remaining_to_end_of_day()
 
-        msg = (f"You still have {h:02d}:{m:02d} remaining before the strike resets."
-               if strike >= 1 else
-               f"Your strike has been reset, but you still have {h:02d}:{m:02d} to make today count!")
+        msg = (
+            f"You still have {h:02d}:{m:02d} remaining before the strike resets."
+            if strike >= 1
+            else f"Your strike has been reset, but you still have {h:02d}:{m:02d} to make today count!"
+        )
 
         pop = tk.Toplevel(self)
         pop.title("Time Remaining")
@@ -344,8 +411,14 @@ class HabitApp(tk.Tk):
         pop.resizable(False, False)
         pop.grab_set()
 
-        tk.Label(pop, text=msg, fg="#e6e6e6", bg=BACKGROUND,
-                 font=("Segoe UI", 11), wraplength=420, justify="left"
+        tk.Label(
+            pop,
+            text=msg,
+            fg=TEXT_BRIGHT,
+            bg=BACKGROUND,
+            font=("Segoe UI", 11),
+            wraplength=420,
+            justify="left",
         ).pack(padx=12, pady=(12, 10))
         ttk.Button(pop, text="OK", command=pop.destroy).pack(padx=12, pady=(0, 12))
 
@@ -358,8 +431,12 @@ class HabitApp(tk.Tk):
         dialog.resizable(False, False)
         dialog.grab_set()
 
-        tk.Label(dialog, text="This will reset the progress. Continue?",
-                 fg="#e6e6e6", bg=BACKGROUND, font=("Segoe UI", 11)
+        tk.Label(
+            dialog,
+            text="This will reset the progress. Continue?",
+            fg=TEXT_BRIGHT,
+            bg=BACKGROUND,
+            font=("Segoe UI", 11),
         ).pack(padx=12, pady=(12, 10))
 
         btns = tk.Frame(dialog, bg=BACKGROUND)
@@ -371,8 +448,6 @@ class HabitApp(tk.Tk):
             self.refresh_view()
 
         ttk.Button(btns, text="OK", command=ok).pack(side="bottom")
-        #ttk.Button(btns, text="Cancel", command=dialog.destroy).pack(side="left", padx=(8, 0))
-
         center_on_parent(dialog, self)
 
     def open_create_dialog(self):
@@ -382,8 +457,12 @@ class HabitApp(tk.Tk):
         dialog.resizable(False, False)
         dialog.grab_set()
 
-        tk.Label(dialog, text="What new habit would you like to track?",
-                 fg="#e6e6e6", bg=BACKGROUND, font=("Segoe UI", 11)
+        tk.Label(
+            dialog,
+            text="What new habit would you like to track?",
+            fg=TEXT_BRIGHT,
+            bg=BACKGROUND,
+            font=("Segoe UI", 11),
         ).pack(padx=12, pady=(12, 6))
 
         entry = ttk.Entry(dialog, width=34)
@@ -400,8 +479,12 @@ class HabitApp(tk.Tk):
             pop.resizable(False, False)
             pop.grab_set()
 
-            tk.Label(pop, text="This habit already exists.",
-                     fg="#e6e6e6", bg=BACKGROUND, font=("Segoe UI", 11)
+            tk.Label(
+                pop,
+                text="This habit already exists.",
+                fg=TEXT_BRIGHT,
+                bg=BACKGROUND,
+                font=("Segoe UI", 11),
             ).pack(padx=12, pady=(12, 8))
 
             ttk.Button(pop, text="OK", command=pop.destroy).pack(padx=12, pady=(0, 12))
@@ -421,9 +504,8 @@ class HabitApp(tk.Tk):
             self.refresh_view()
 
         ttk.Button(btns, text="OK", command=on_ok).pack(side="bottom")
-        #ttk.Button(btns, text="Close", command=dialog.destroy).pack(side="left", padx=(8, 0))
-
         center_on_parent(dialog, self)
+
 
 if __name__ == "__main__":
     app = HabitApp()
