@@ -3,6 +3,12 @@ from tkinter import ttk
 import os, json
 from datetime import datetime, timedelta
 import habit_timer
+from habit_icon_creator import open_habit_icon_creator
+from PIL import Image, ImageTk
+
+
+ICON_BOX_SIZE = 150
+ICON_PREVIEW_SIZE = 150
 
 HABITS_FILE = "habits.jsonl"
 MAX_DAYS_BAR = 30
@@ -10,24 +16,24 @@ MAX_DAYS_BAR = 30
 # =========================
 # COLOR PALETTE (EDIT HERE)
 # =========================
-BACKGROUND = "#E3A6FF"
+BACKGROUND = "#F3EEFF"
 PANEL_BG   = "#E9DDFF"
-TEXT       = "#702C8C"
-MUTED_TEXT = "#5B5077"
-ACCENT     = "#BFA2FF"
-BUTTON_BG  = "#E3A6FF"
+TEXT       = "#B41DDA"
+MUTED_TEXT = "#9954AE"
+ACCENT     = "#FFDBF5"
+BUTTON_BG  = "#BFA2FF"
 
 # Additional UI colors used in this file
 TEXT_SOFT     = MUTED_TEXT         # was "#cccccc"
 TEXT_BRIGHT   = TEXT               # was "#e6e6e6"
 
-SUCCESS_GREEN = "#2ecc71"          # checkmark + filled bars
+SUCCESS_GREEN = "#9DFF00"          # checkmark + filled bars
 DANGER_RED    = "#ff4d4d"          # X button
 
-BAR_BG        = "#1f1f1f"          # bar background canvas
-BAR_EMPTY     = "#2b2b2b"          # empty segments
+BAR_BG        = "#E3A6FF"         # bar background canvas
+BAR_EMPTY     = "#B41DDA"         # empty segments
 BAR_FILLED    = SUCCESS_GREEN      # filled segments
-BAR_HIGHLIGHT = "#36f18a"          # small top highlight for today
+BAR_HIGHLIGHT = "#B3FF4F"          # small top highlight for today
 
 BTN_ACTIVE_BG = ACCENT             # button active background
 
@@ -99,12 +105,20 @@ def _sanitize_record(rec: dict) -> dict:
     for s in dates:
         if isinstance(s, str):
             try:
-                parse_ymd(s)  # validate format
+                parse_ymd(s)
                 clean.add(s)
             except Exception:
                 pass
 
-    return {"habit_name": name.strip(), "dates": sorted(clean)}
+    icon_path = rec.get("icon_path", "")
+    if not isinstance(icon_path, str):
+        icon_path = ""
+
+    return {
+        "habit_name": name.strip(),
+        "dates": sorted(clean),
+        "icon_path": icon_path.strip(),
+    }
 
 def load_habits_jsonl(filename=HABITS_FILE):
     habits = {}
@@ -205,11 +219,79 @@ class HabitApp(tk.Tk):
         self.list_frame = tk.Frame(self, bg=BACKGROUND)
         self.list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
+        self.icon_refs = []
         self.habits = {}
         self.refresh_view()
 
+    def mark_habit_done_from_timer(self, habit_name: str):
+        rec = self.habits.get(habit_name, {"habit_name": habit_name, "dates": [], "icon_path": ""})
+        dates = sorted(set(rec.get("dates", [])))
+        icon_path = rec.get("icon_path", "")
+
+        t = today_str()
+        if t not in dates:
+            dates.append(t)
+
+        upsert_habit(
+            {
+                "habit_name": habit_name,
+                "dates": dates,
+                "icon_path": icon_path,
+            },
+            HABITS_FILE,
+        )
+        self.refresh_view()
+
+    def load_icon_photo(self, icon_path: str):
+        if not icon_path or not os.path.exists(icon_path):
+            return None
+
+        try:
+            image = Image.open(icon_path).convert("RGBA")
+            image = image.resize((64, 64), Image.Resampling.NEAREST)
+            return ImageTk.PhotoImage(image)
+        except Exception:
+            return None
+
+    def finish_create_or_edit_habit(self, old_name: str, new_name: str, icon_path: str):
+        old_name = (old_name or "").strip()
+        new_name = new_name.strip()
+
+        if old_name and old_name in self.habits:
+            old_record = self.habits[old_name]
+            dates = list(old_record.get("dates", []))
+
+            if old_name != new_name:
+                delete_habit(old_name, HABITS_FILE)
+        else:
+            dates = []
+
+        upsert_habit(
+            {
+                "habit_name": new_name,
+                "dates": dates,
+                "icon_path": icon_path,
+            },
+            HABITS_FILE,
+        )
+        self.refresh_view()
+
+    def open_edit_dialog(self, habit_name: str):
+        rec = self.habits.get(habit_name, {"habit_name": habit_name, "dates": [], "icon_path": ""})
+
+        open_habit_icon_creator(
+            parent=self,
+            existing_habits=self.habits.keys(),
+            on_accept=self.finish_create_or_edit_habit,
+            mode="edit",
+            original_name=habit_name,
+            initial_name=habit_name,
+            initial_icon_path=rec.get("icon_path", ""),
+        )
+
     def refresh_view(self):
         self.habits = load_habits_jsonl(HABITS_FILE)
+        self.icon_refs = []
 
         for w in self.list_frame.winfo_children():
             w.destroy()
@@ -227,11 +309,29 @@ class HabitApp(tk.Tk):
         for habit_name in sorted(self.habits.keys(), key=str.lower):
             rec = self.habits[habit_name]
             dates = sorted(set(rec.get("dates", [])))
+            icon_path = rec.get("icon_path", "")
 
             strike = strike_from_dates(dates)
 
             row = tk.Frame(self.list_frame, bg=BACKGROUND)
             row.pack(fill="x", anchor="n", pady=10)
+
+            icon_holder = tk.Frame(row, bg=BACKGROUND, width=100, height=100)
+            icon_holder.pack(side="left", padx=(0, 10))
+            icon_holder.pack_propagate(False)
+
+            photo = self.load_icon_photo(icon_path)
+            if photo is not None:
+                self.icon_refs.append(photo)
+                tk.Label(icon_holder, image=photo, bg=BACKGROUND).pack(expand=True)
+            else:
+                tk.Label(
+                    icon_holder,
+                    text="■",
+                    fg=TEXT_SOFT,
+                    bg=BACKGROUND,
+                    font=("Segoe UI", 12),
+                ).pack(expand=True)
 
             mid = tk.Frame(row, bg=BACKGROUND)
             mid.pack(side="left", fill="x", expand=True)
@@ -258,47 +358,30 @@ class HabitApp(tk.Tk):
 
             tk.Button(
                 btns,
-                text="✓",
-                font=("Segoe UI", 12, "bold"),
-                fg=SUCCESS_GREEN,
-                bg=BACKGROUND,
-                activebackground=BTN_ACTIVE_BG,
-                bd=0,
-                command=lambda h=habit_name: self.on_check(h),
-            ).pack(side="left", padx=6)
-
-            tk.Button(
-                btns,
                 text="🕒",
                 font=("Segoe UI", 12),
                 fg=TEXT_BRIGHT,
                 bg=BACKGROUND,
                 activebackground=BTN_ACTIVE_BG,
                 bd=0,
-                command=lambda h=habit_name: self.on_clock(h),
+                command=lambda h=habit_name: habit_timer.open_habit_timer(
+                    self,
+                    h,
+                    on_complete=lambda: self.mark_habit_done_from_timer(h)
+                ),
             ).pack(side="left", padx=6)
 
             tk.Button(
                 btns,
-                text="✗",
+                text="...",
                 font=("Segoe UI", 12, "bold"),
-                fg=DANGER_RED,
-                bg=BACKGROUND,
-                activebackground=BTN_ACTIVE_BG,
-                bd=0,
-                command=lambda h=habit_name: self.on_reset_prompt(h),
-            ).pack(side="left", padx=6)
-
-            tk.Button(
-                btns,
-                text="Timer",
-                font=("Segoe UI", 12),
                 fg=TEXT_BRIGHT,
                 bg=BACKGROUND,
                 activebackground=BTN_ACTIVE_BG,
                 bd=0,
-                command=lambda h=habit_name: habit_timer.open_habit_timer(self, h),
+                command=lambda h=habit_name: self.open_edit_dialog(h),
             ).pack(side="left", padx=6)
+
 
     # ---------- Remove dropdown + confirm ----------
     def open_remove_dropdown(self):
@@ -344,55 +427,8 @@ class HabitApp(tk.Tk):
         center_on_parent(dialog, self)
 
     # ---------- buttons ----------
-    def on_check(self, habit_name: str):
-        rec = self.habits.get(habit_name, {"habit_name": habit_name, "dates": []})
-        dates = sorted(set(rec.get("dates", [])))
 
-        t = today_str()
-        if t in dates:
-            pop = tk.Toplevel(self)
-            pop.title("Already recorded")
-            pop.configure(bg=BACKGROUND)
-            pop.resizable(False, False)
-            pop.grab_set()
-            tk.Label(
-                pop,
-                text=f"'{habit_name}' is already recorded for today.",
-                fg=TEXT_BRIGHT,
-                bg=BACKGROUND,
-                font=("Segoe UI", 11),
-            ).pack(padx=12, pady=(12, 10))
-            ttk.Button(pop, text="OK", command=pop.destroy).pack(padx=12, pady=(0, 12))
-            center_on_parent(pop, self)
-            return
-
-        dialog = tk.Toplevel(self)
-        dialog.title("Confirm")
-        dialog.configure(bg=BACKGROUND)
-        dialog.resizable(False, False)
-        dialog.grab_set()
-
-        tk.Label(
-            dialog,
-            text=f"Mark '{habit_name}' as done today?",
-            fg=TEXT_BRIGHT,
-            bg=BACKGROUND,
-            font=("Segoe UI", 11),
-        ).pack(padx=12, pady=(12, 10))
-
-        btns = tk.Frame(dialog, bg=BACKGROUND)
-        btns.pack(padx=12, pady=(0, 12), fill="x")
-
-        def ok():
-            dates.append(t)
-            upsert_habit({"habit_name": habit_name, "dates": dates}, HABITS_FILE)
-            dialog.destroy()
-            self.refresh_view()
-
-        ttk.Button(btns, text="OK", command=ok).pack(side="bottom")
-        center_on_parent(dialog, self)
-
-    def on_clock(self, habit_name: str):
+    """def on_clock(self, habit_name: str):
         rec = self.habits.get(habit_name, {"habit_name": habit_name, "dates": []})
         dates = sorted(set(rec.get("dates", [])))
 
@@ -405,72 +441,29 @@ class HabitApp(tk.Tk):
             else f"Your strike has been reset, but you still have {h:02d}:{m:02d} to make today count!"
         )
 
-        pop = tk.Toplevel(self)
-        pop.title("Time Remaining")
-        pop.configure(bg=BACKGROUND)
-        pop.resizable(False, False)
-        pop.grab_set()
-
-        tk.Label(
-            pop,
-            text=msg,
-            fg=TEXT_BRIGHT,
-            bg=BACKGROUND,
-            font=("Segoe UI", 11),
-            wraplength=420,
-            justify="left",
-        ).pack(padx=12, pady=(12, 10))
-        ttk.Button(pop, text="OK", command=pop.destroy).pack(padx=12, pady=(0, 12))
-
-        center_on_parent(pop, self)
-
-    def on_reset_prompt(self, habit_name: str):
-        dialog = tk.Toplevel(self)
-        dialog.title("Reset progress")
-        dialog.configure(bg=BACKGROUND)
-        dialog.resizable(False, False)
-        dialog.grab_set()
-
-        tk.Label(
-            dialog,
-            text="This will reset the progress. Continue?",
-            fg=TEXT_BRIGHT,
-            bg=BACKGROUND,
-            font=("Segoe UI", 11),
-        ).pack(padx=12, pady=(12, 10))
-
-        btns = tk.Frame(dialog, bg=BACKGROUND)
-        btns.pack(padx=12, pady=(0, 12), fill="x")
-
-        def ok():
-            upsert_habit({"habit_name": habit_name, "dates": []}, HABITS_FILE)
-            dialog.destroy()
-            self.refresh_view()
-
-        ttk.Button(btns, text="OK", command=ok).pack(side="bottom")
-        center_on_parent(dialog, self)
+       
+"""
+    def _finish_create_habit(self, habit_name: str, icon_path: str):
+        upsert_habit(
+            {
+                "habit_name": habit_name,
+                "dates": [],
+                "icon_path": icon_path,
+            },
+            HABITS_FILE,
+        )
+        self.refresh_view()
 
     def open_create_dialog(self):
-        dialog = tk.Toplevel(self)
-        dialog.title("Create a new habit")
-        dialog.configure(bg=BACKGROUND)
-        dialog.resizable(False, False)
-        dialog.grab_set()
-
-        tk.Label(
-            dialog,
-            text="What new habit would you like to track?",
-            fg=TEXT_BRIGHT,
-            bg=BACKGROUND,
-            font=("Segoe UI", 11),
-        ).pack(padx=12, pady=(12, 6))
-
-        entry = ttk.Entry(dialog, width=34)
-        entry.pack(padx=12, pady=(0, 10))
-        entry.focus_set()
-
-        btns = tk.Frame(dialog, bg=BACKGROUND)
-        btns.pack(padx=12, pady=(0, 12), fill="x")
+        open_habit_icon_creator(
+            parent=self,
+            existing_habits=self.habits.keys(),
+            on_accept=self.finish_create_or_edit_habit,
+            mode="create",
+            original_name="",
+            initial_name="",
+            initial_icon_path="",
+        )
 
         def show_exists_popup():
             pop = tk.Toplevel(dialog)
@@ -503,8 +496,14 @@ class HabitApp(tk.Tk):
             dialog.destroy()
             self.refresh_view()
 
+        btns = tk.Frame(dialog, bg=BACKGROUND)
         ttk.Button(btns, text="OK", command=on_ok).pack(side="bottom")
         center_on_parent(dialog, self)
+
+
+if __name__ == "__main__":
+    app = HabitApp()
+    app.mainloop()
 
 
 if __name__ == "__main__":
