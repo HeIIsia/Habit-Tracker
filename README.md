@@ -1,50 +1,60 @@
-# Habit-Tracker
-Track daily habits in one place: add new habits, mark them done each day, see your current streak at a glance, check how much time is left before today ends, reset progress when needed, and remove habits you no longer want to track—all with quick buttons and clear pop-ups.
+# Habit Tracker
+
+A desktop habit tracker built around *doing the habit* (via a focused work timer) and seeing your streak at a glance.
+
+
+<img width="975" height="719" alt="screen_001" src="https://github.com/user-attachments/assets/e279486a-4032-4681-99d1-c7c5eb07f6f2" />
+
+<img width="971" height="719" alt="screen_003" src="https://github.com/user-attachments/assets/a373120e-d6d9-4d70-8e61-297b81dca479" />
+
 
 ## What you can do
-- **Create habits** you want to build (e.g., Reading, Programming, Socializing).
-- **Mark a habit as done today** with ✓ (you’ll confirm with OK).
-- **See your current streak** at a glance (consecutive days).
-- **Check time left today** with 🕒 so you know how long you have before the day ends.
-- **Reset a habit’s progress** with ✗ (confirmation required).
+- **Create habits** and give each one a matching **icon**.
+- **Start a work/break timer** for any habit (🕒). When a full session completes, the app records today for that habit and logs the work time.
+- **Edit habit settings** with **…** (rename the habit and/or change its icon).
 - **Remove habits** you no longer want to track.
 
+## Main screen
+Each habit row shows:
+- **Icon** (left)
+- **Habit name + streak + total days recorded**
+- A **30-segment progress bar** that visualizes your current streak
+- Two action buttons on the right:
+  - **🕒 Timer** — open the focus timer for this habit
+  - **…** — open habit settings (rename / icon)
+
 ## How streaks work
-- Your **streak is calculated from recorded dates**.
-- **Today counts toward your streak only after you press ✓ and confirm OK.**
-- If you skip a day, the streak resets automatically (based on the date history).
+- Each habit stores only a **list of completed dates**.
+- Your **streak is calculated automatically from those dates**:
+  - If today is already recorded, the streak counts consecutive days ending **today**
+  - Otherwise, the streak counts consecutive days ending **yesterday**
+- If your streak is **0**, the bar shows **no green segments**.
 
-## Requirements
-- Python 3.9+ recommended
-- Tkinter (usually included with Python on Windows/macOS; Linux may require an extra package)
+## Focus timer (work/break)
+Open the timer with **🕒** next to a habit.
+- Choose **Work** and **Break** durations from the dropdowns.
+- Press **START** to begin the work countdown.
+- When work finishes:
+  - gentle beeps signal the transition
+  - a **1-minute prep countdown** runs
+  - then the break countdown starts
+- When the break finishes, gentle beeps signal the session is complete.
+- On completion, the app:
+  1) logs the **work time** to the database
+  2) records **today** for that habit (so it counts toward your streak)
 
-## Data file
-The app stores habits in:
+## Habit creation & icon settings
+- Click **Create** to add a new habit.
+- Use **Generate Icon** to create a matching icon, then confirm when you like it.
+- Use **…** to edit a habit later (rename and/or update the icon).
 
-- `habits.jsonl`
+## Data files
+The app stores your data locally in the same folder as the scripts.
 
-Each habit is stored as one JSON object per line:
+### `habits.jsonl`
+Stores one record per habit (the app keeps this file “compacted” so it doesn’t grow with duplicates).
 
+Example:
 ```json
-{"habit_name": "Reading", "dates": ["2026-02-25", "2026-02-26"]}
-```
-
-- `dates` contains the days you marked the habit as completed (`YYYY-MM-DD`).
-- The app computes the streak from these dates, so no separate “strike” field is needed.
-
-## Buttons
-For each habit row:
-- **✓** Mark done today (adds today’s date after OK).
-- **🕒** Show time remaining today and whether you still have time to keep the streak.
-- **✗** Reset progress (clears recorded dates after OK).
-
-Top bar:
-- **Create** Add a new habit.
-- **Remove** Pick an existing habit to delete from the list (confirmation required).
-
-
-## Notes
-- The app expects `habits.jsonl` to be in the **same folder** as the script.
-- If you previously stored duplicate lines, the app’s startup “compact” step should clean it up.
-
+{"habit_name": "Reading", "dates": ["2026-02-25", "2026-02-26"], "icon_path": "icons/reading.png"}
 
