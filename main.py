@@ -506,6 +506,3 @@ if __name__ == "__main__":
     app.mainloop()
 
 
-if __name__ == "__main__":
-    app = HabitApp()
-    app.mainloop()
